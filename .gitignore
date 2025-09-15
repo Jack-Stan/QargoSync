@@ -18,6 +18,19 @@ bld/
 .vs/
 .vscode/
 
+# Security - Never commit credentials
+appsettings.local.json
+appsettings.*.local.json
+*.secrets.json
+.env
+.env.local
+.env.production
+
+# API keys and sensitive configuration
+src/**/appsettings.local.json
+src/**/appsettings.development.json
+src/**/appsettings.production.json
+
 # User-specific files
 *.rsuser
 *.suo

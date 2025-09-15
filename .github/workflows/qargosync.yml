@@ -1,0 +1,139 @@
+name: QargoSync - Resource Unavailability Synchronization
+
+on:
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (preview changes only)'
+        required: false
+        default: true
+        type: boolean
+      explore_api:
+        description: 'Run API exploration instead of sync'
+        required: false
+        default: false
+        type: boolean
+  
+  # Scheduled runs every 6 hours
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+    
+  # Trigger on main branch pushes (for testing)
+  push:
+    branches: [ main ]
+    paths: 
+      - 'src/**'
+      - '.github/workflows/**'
+
+jobs:
+  qargosync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore
+      working-directory: ./
+      
+    - name: 🏗️ Build application
+      run: dotnet build --no-restore --configuration Release
+      working-directory: ./
+      
+    - name: 🧪 Run tests (if available)
+      run: dotnet test --no-build --configuration Release --verbosity normal
+      working-directory: ./
+      continue-on-error: true
+      
+    - name: 🔍 API Exploration Mode
+      if: ${{ github.event.inputs.explore_api == 'true' }}
+      run: dotnet run --configuration Release -- --explore
+      working-directory: ./src/QargoSync.App
+      env:
+        QARGO_MASTER_CLIENT_ID: ${{ secrets.QARGO_MASTER_CLIENT_ID }}
+        QARGO_MASTER_CLIENT_SECRET: ${{ secrets.QARGO_MASTER_CLIENT_SECRET }}
+        QARGO_MASTER_BASE_URL: ${{ secrets.QARGO_MASTER_BASE_URL }}
+        QARGO_TARGET_CLIENT_ID: ${{ secrets.QARGO_TARGET_CLIENT_ID }}
+        QARGO_TARGET_CLIENT_SECRET: ${{ secrets.QARGO_TARGET_CLIENT_SECRET }}
+        QARGO_TARGET_BASE_URL: ${{ secrets.QARGO_TARGET_BASE_URL }}
+        
+    - name: 🔄 Synchronization (Dry Run)
+      if: ${{ github.event.inputs.explore_api != 'true' && (github.event.inputs.dry_run == 'true' || github.event_name == 'push') }}
+      run: dotnet run --configuration Release
+      working-directory: ./src/QargoSync.App
+      env:
+        QARGO_MASTER_CLIENT_ID: ${{ secrets.QARGO_MASTER_CLIENT_ID }}
+        QARGO_MASTER_CLIENT_SECRET: ${{ secrets.QARGO_MASTER_CLIENT_SECRET }}
+        QARGO_MASTER_BASE_URL: ${{ secrets.QARGO_MASTER_BASE_URL }}
+        QARGO_TARGET_CLIENT_ID: ${{ secrets.QARGO_TARGET_CLIENT_ID }}
+        QARGO_TARGET_CLIENT_SECRET: ${{ secrets.QARGO_TARGET_CLIENT_SECRET }}
+        QARGO_TARGET_BASE_URL: ${{ secrets.QARGO_TARGET_BASE_URL }}
+        SYNC_DRY_RUN: 'true'
+        
+    - name: 🚀 Synchronization (Production)
+      if: ${{ github.event.inputs.explore_api != 'true' && github.event.inputs.dry_run == 'false' && github.event_name == 'schedule' }}
+      run: dotnet run --configuration Release
+      working-directory: ./src/QargoSync.App
+      env:
+        QARGO_MASTER_CLIENT_ID: ${{ secrets.QARGO_MASTER_CLIENT_ID }}
+        QARGO_MASTER_CLIENT_SECRET: ${{ secrets.QARGO_MASTER_CLIENT_SECRET }}
+        QARGO_MASTER_BASE_URL: ${{ secrets.QARGO_MASTER_BASE_URL }}
+        QARGO_TARGET_CLIENT_ID: ${{ secrets.QARGO_TARGET_CLIENT_ID }}
+        QARGO_TARGET_CLIENT_SECRET: ${{ secrets.QARGO_TARGET_CLIENT_SECRET }}
+        QARGO_TARGET_BASE_URL: ${{ secrets.QARGO_TARGET_BASE_URL }}
+        SYNC_DRY_RUN: 'false'
+        
+    - name: 📋 Upload logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: qargosync-logs-${{ github.run_number }}
+        path: ./src/QargoSync.App/logs/
+        retention-days: 7
+        
+    - name: 📊 Summary
+      if: always()
+      run: |
+        echo "### QargoSync Execution Summary 📊" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Run Information:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Dry Run: ${{ github.event.inputs.dry_run || 'true' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- API Exploration: ${{ github.event.inputs.explore_api || 'false' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Timestamp: $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Logs:** Check the uploaded artifacts for detailed execution logs" >> $GITHUB_STEP_SUMMARY
+        
+  security-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔒 Check for secrets in code
+      run: |
+        echo "🔍 Scanning for potential secrets in source code..."
+        # Check for common secret patterns
+        if grep -r "password\|secret\|key" --include="*.cs" --include="*.json" src/ | grep -v "SecretKey" | grep -v "ClientSecret" | grep -v "GetEnvironmentVariable"; then
+          echo "⚠️ Warning: Potential secrets found in source code"
+          exit 1
+        else
+          echo "✅ No hardcoded secrets detected"
+        fi
+        
+    - name: 🔐 Verify environment variable usage
+      run: |
+        echo "🔍 Verifying proper environment variable usage..."
+        if grep -r "QARGO_.*_CLIENT_ID\|QARGO_.*_CLIENT_SECRET\|QARGO_.*_BASE_URL" --include="*.cs" --include="*.md" src/ .github/; then
+          echo "✅ Environment variables properly referenced"
+        else
+          echo "⚠️ Warning: Environment variables may not be properly configured"
+        fi

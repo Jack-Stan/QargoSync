@@ -31,13 +31,13 @@ public class Resource
 /// </summary>
 public class ResourceListResponse
 {
-    [JsonPropertyName("results")]
+    [JsonPropertyName("items")]
     public List<Resource> Results { get; set; } = new();
 
     [JsonPropertyName("count")]
     public int Count { get; set; }
 
-    [JsonPropertyName("next")]
+    [JsonPropertyName("next_cursor")]
     public string? Next { get; set; }
 
     [JsonPropertyName("previous")]

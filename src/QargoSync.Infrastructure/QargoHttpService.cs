@@ -60,6 +60,7 @@ public class QargoHttpService : IQargoHttpService
             }
 
             var json = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("API Response from {Endpoint}: {ResponseContent}", url, json);
             return JsonSerializer.Deserialize<T>(json, GetJsonOptions());
         }
         catch (Exception ex)

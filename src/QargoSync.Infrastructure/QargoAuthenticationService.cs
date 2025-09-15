@@ -49,20 +49,23 @@ public class QargoAuthenticationService : IAuthenticationService
     {
         try
         {
-            var tokenRequest = new AuthTokenRequest
-            {
-                ClientId = environment.ClientId,
-                ClientSecret = environment.ClientSecret
-            };
-
-            var json = JsonSerializer.Serialize(tokenRequest);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var tokenUrl = $"{environment.BaseUrl.TrimEnd('/')}/v1/auth/token";
+            // According to Qargo API docs, authentication should be done against the main API endpoint
+            // using HTTP Basic Auth with client_id:client_secret
+            var tokenUrl = "https://api.qargo.com/v1/auth/token";
             
             _logger.LogDebug("Requesting token from {TokenUrl}", tokenUrl);
             
-            var response = await _httpClient.PostAsync(tokenUrl, content);
+            // Create HTTP request with Basic Auth
+            var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl);
+            
+            // Set up Basic Authentication header
+            var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{environment.ClientId}:{environment.ClientSecret}"));
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
+            
+            // Set content type (empty body for this request)
+            request.Content = new StringContent("", Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {

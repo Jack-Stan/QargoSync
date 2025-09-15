@@ -2,8 +2,8 @@ namespace QargoSync.Models.Configuration;
 
 public class QargoSettings
 {
-    public QargoEnvironment MasterEnvironment { get; set; } = new();
-    public QargoEnvironment TargetEnvironment { get; set; } = new();
+    public QargoEnvironment Master { get; set; } = new();
+    public QargoEnvironment Target { get; set; } = new();
 }
 
 public class QargoEnvironment
